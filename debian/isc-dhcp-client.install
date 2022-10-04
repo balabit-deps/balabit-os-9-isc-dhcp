@@ -1,0 +1,12 @@
+dhclient sbin
+
+debian/dhclient.conf etc/dhcp
+
+debian/debug etc/dhcp
+debian/resolved-enter etc/dhcp/dhclient-enter-hooks.d/
+debian/resolved etc/dhcp/dhclient-exit-hooks.d/
+
+debian/apparmor/sbin.dhclient etc/apparmor.d
+
+debian/initramfs-tools/share/hooks/zz-dhclient usr/share/initramfs-tools/hooks
+debian/initramfs-tools/lib/etc usr/lib/initramfs-tools/
