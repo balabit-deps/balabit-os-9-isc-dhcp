@@ -35,3 +35,4 @@ ubuntu-dhcpd-conf.patch
 dhclient-write-pidfile-earlier.patch
 CVE-2022-2928.patch
 CVE-2022-2929.patch
+lp1926139-watch-socket-fd-later.patch

@@ -1,3 +1,21 @@
+isc-dhcp (4.4.1-2.3ubuntu2.4) jammy; urgency=medium
+
+  [ Mauricio Faria de Oliveira ]
+  * Prevent race condition that might ignore DHCP OFFERs/ACKs
+    when dhclient receives DHCP traffic noise. (LP: #1926139)
+    The previous/racy behavior can be switched back on with
+    the 'DHCP_FD_FLAGS_POKE=0' environment variable or
+    the 'dhcp.fd_flags_poke=0' kernel cmdline option.
+    - d/p/lp1926139-watch-socket-fd-later.patch: fix, switches.
+    - d/apparmor/sbin.dhclient,usr.sbin.dhcpd: /proc/cmdline r.
+
+  [ Steve Langasek ]
+  * Include /etc/dhcp/dhclient-exit-hooks.d/rfc3442-classless-routes
+    in the initramfs. (LP: #1937110)
+    - d/initramfs-tools/share/hooks/zz-dhclient: copy_exec it.
+
+ -- Mauricio Faria de Oliveira <mfo@canonical.com>  Tue, 31 Jan 2023 18:54:40 -0300
+
 isc-dhcp (4.4.1-2.3ubuntu2.3) jammy-security; urgency=medium
 
   * SECURITY UPDATE: option refcount overflow

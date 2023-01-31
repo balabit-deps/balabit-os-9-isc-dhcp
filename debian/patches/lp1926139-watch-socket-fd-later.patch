@@ -1,0 +1,110 @@
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1926139
+Description: Watch the socket's fd later (after registration/initialization)
+ Prevent race condition that might ignore DHCP OFFERs/ACKs
+ when dhclient receives DHCP traffic noise. (LP: #1926139)
+ .
+ For more details on the issue and fix implementation,
+ see the comments in omapi_register_io_object().
+ .
+ The previous/racy behavior can be switched back on with
+ the 'DHCP_FD_FLAGS_POKE=0' environment variable or
+ the 'dhcp.fd_flags_poke=0' kernel cmdline option.
+Author: Mauricio Faria de Oliveira <mfo@canonical.com>
+Forwarded: no
+Last-Update: 2023-01-31
+
+Index: isc-dhcp-4.4.1/omapip/dispatch.c
+===================================================================
+--- isc-dhcp-4.4.1.orig/omapip/dispatch.c
++++ isc-dhcp-4.4.1/omapip/dispatch.c
+@@ -193,6 +193,41 @@ omapi_iscsock_cb(isc_task_t   *task,
+ 	return (0);
+ }
+ 
++/* Check for environment variable DHCP_FD_FLAGS_POKE=0. */
++static int check_envvar(void) {
++	char *value;
++	return ((value = getenv("DHCP_FD_FLAGS_POKE")) &&
++		!strncmp(value, "0", sizeof("0")));
++}
++
++/*
++ * Check for kernel cmdline option dhcp.fd_flags_poke=0.
++ * Source: casper-md5check.c
++ */
++static int check_cmdline(void) {
++	FILE *cmdline = fopen("/proc/cmdline", "r");
++	char buf[1024];
++	char *bufp = buf, *token;
++	int found = 0;
++
++	if (!cmdline)
++		return 0;
++
++	memset(buf, '\0', 1024);
++	fread(buf, 1023, 1, cmdline);
++
++	while ((token = strsep(&bufp, " \n")) != NULL && bufp != NULL) {
++		if (strncmp(token, "dhcp.fd_flags_poke=0",
++			    sizeof("dhcp.fd_flags_poke=0")) == 0) {
++			found = 1;
++			break;
++		}
++	}
++
++	fclose(cmdline);
++	return found;
++}
++
+ /* Register an I/O handle so that we can do asynchronous I/O on it. */
+ 
+ isc_result_t omapi_register_io_object (omapi_object_t *h,
+@@ -209,6 +244,28 @@ isc_result_t omapi_register_io_object (o
+ 	omapi_io_object_t *obj, *p;
+ 	int fd_flags = 0, fd = 0;
+ 
++	/*
++	 * (LP: #1926139)
++	 *
++	 * Prevent race condition with the socket's callback omapi_iscsock_cb()
++	 * being called in between isc_socket_fdwatchcreate() and function end
++	 * (ie, with potentially inconsistent `omapi_io_states` list and `obj`,
++	 * which may `return 0` on the callback thus stop watching the socket,
++	 * effectively ignoring any packets received).
++	 *
++	 * Let's poke the socket manager to watch the socket fd only _after_
++	 * list/object are done, with isc_socket_fdwatchpoke(); not _before_
++	 * they are done, from within isc_socket_fdwatchcreate().
++	 *
++	 * Init-time switches for original (racy) behavior:
++	 * - DHCP_FD_FLAGS_POKE=0 as environment variable.
++	 * - dhcp.fd_flags_poke=0 as kernel cmdline option.
++	 */
++	static int fd_flags_poke = 1;
++
++	if (!omapi_io_states.refcnt && (check_envvar() || check_cmdline()))
++		fd_flags_poke = 0;
++
+ 	/* omapi_io_states is a static object.   If its reference count
+ 	   is zero, this is the first I/O handle to be registered, so
+ 	   we need to initialize it.   Because there is no inner or outer
+@@ -257,7 +314,8 @@ isc_result_t omapi_register_io_object (o
+ 
+ 	if (fd_flags != 0) {
+ 		status = isc_socket_fdwatchcreate(dhcp_gbl_ctx.socketmgr,
+-						  fd, fd_flags,
++						  fd,
++						  (fd_flags_poke ? 0 : fd_flags),
+ 						  omapi_iscsock_cb,
+ 						  obj,
+ 						  dhcp_gbl_ctx.task,
+@@ -290,6 +348,9 @@ isc_result_t omapi_register_io_object (o
+ 	obj -> writer = writer;
+ 	obj -> reaper = reaper;
+ 
++	if (fd_flags_poke)
++		isc_socket_fdwatchpoke(obj->fd, fd_flags);
++
+ 	omapi_io_dereference(&obj, MDL);
+ 	return ISC_R_SUCCESS;
+ }

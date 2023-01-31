@@ -25,4 +25,5 @@ copy_exec /bin/run-parts
 copy_exec /sbin/dhclient
 copy_exec /sbin/dhclient-script
 cp -a /usr/lib/initramfs-tools/etc/dhcp/ $DESTDIR/etc/dhcp/
+copy_exec /etc/dhcp/dhclient-exit-hooks.d/rfc3442-classless-routes
 mkdir -p $DESTDIR/var/lib/dhcp/
